@@ -15,9 +15,10 @@ pub fn is_repo_initialized() -> bool {
 pub fn create_repo_dirs() -> Result<()> {
     let dirs = [
         ".rust-git",
-        ".rust-git/objects",  // 存储对象（文件/提交/目录树）
-        ".rust-git/refs",     // 引用（分支/标签）
-        ".rust-git/logs",     // 日志
+        ".rust-git/objects",    // 存储对象（文件/提交/目录树）
+        ".rust-git/refs",       // 引用（分支/标签）
+        ".rust-git/refs/heads", // 分支存储目录
+        ".rust-git/logs",       // 日志
     ];
 
     for dir in dirs {
@@ -114,4 +115,144 @@ pub fn get_repo_root() -> Result<PathBuf> {
             return Err(anyhow::anyhow!("未找到 rust-git 仓库根目录（未初始化或不在仓库内）"));
         }
     }
+}
+
+/// 获取当前分支名（默认 master）
+pub fn get_current_branch() -> Result<String> {
+    let head_path = Path::new(".rust-git/HEAD");
+    if !head_path.exists() {
+        return Ok("master".to_string());
+    }
+
+    let head_content = fs::read_to_string(head_path)
+        .context("读取 HEAD 失败")?;
+    // HEAD 格式：ref: refs/heads/[分支名]（直接存储分支名则简化处理）
+    let branch = if head_content.starts_with("ref: ") {
+        head_content.trim_start_matches("ref: refs/heads/").trim().to_string()
+    } else {
+        // 若 HEAD 直接存储提交ID，默认 master
+        "master".to_string()
+    };
+
+    Ok(branch)
+}
+
+/// 列出所有分支
+pub fn list_branches() -> Result<Vec<String>> {
+    let branches_dir = Path::new(".rust-git/refs/heads");
+    if !branches_dir.exists() {
+        return Ok(vec!["master".to_string()]);
+    }
+
+    let mut branches = Vec::new();
+    for entry in fs::read_dir(branches_dir)
+        .context("读取分支目录失败")?
+    {
+        let entry = entry.context("读取分支条目失败")?;
+        if entry.file_type()?.is_file() {
+            let branch_name = entry.file_name()
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("分支名转换失败"))?
+                .to_string();
+            branches.push(branch_name);
+        }
+    }
+
+    if branches.is_empty() {
+        branches.push("master".to_string());
+    }
+
+    Ok(branches)
+}
+
+/// 创建分支（关联当前 HEAD 指向的提交）
+pub fn create_branch(branch_name: &str) -> Result<()> {
+    // 检查分支名合法性
+    if branch_name.contains('/') || branch_name.contains('\\') || branch_name.is_empty() {
+        return Err(anyhow::anyhow!("分支名不合法：{}", branch_name));
+    }
+
+    // 检查分支是否已存在
+    let branch_path = Path::new(".rust-git/refs/heads").join(branch_name);
+    if branch_path.exists() {
+        return Err(anyhow::anyhow!("分支 {} 已存在", branch_name));
+    }
+
+    // 获取当前 HEAD 指向的提交ID
+    let head_path = Path::new(".rust-git/HEAD");
+    let head_content = if head_path.exists() {
+        fs::read_to_string(head_path)
+            .context("读取 HEAD 失败")?
+            .trim()
+            .to_string()
+    } else {
+        return Err(anyhow::anyhow!("暂无提交记录，无法创建分支"));
+    };
+
+    // 分支文件存储对应提交ID
+    let commit_id = if head_content.starts_with("ref: ") {
+        // 若 HEAD 指向分支，读取分支对应的提交ID
+        let target_branch = head_content.trim_start_matches("ref: refs/heads/").trim();
+        let target_branch_path = Path::new(".rust-git/refs/heads").join(target_branch);
+        fs::read_to_string(target_branch_path)
+            .context(format!("读取分支 {} 失败", target_branch))?
+            .trim()
+            .to_string()
+    } else {
+        head_content
+    };
+
+    // 创建分支文件
+    fs::write(&branch_path, commit_id)
+        .context(format!("创建分支 {} 失败", branch_name))?;
+
+    Ok(())
+}
+
+/// 删除分支
+pub fn delete_branch(branch_name: &str) -> Result<()> {
+    // 禁止删除当前分支
+    let current_branch = get_current_branch()?;
+    if branch_name == current_branch {
+        return Err(anyhow::anyhow!("无法删除当前分支：{}", branch_name));
+    }
+
+    // 禁止删除 master 分支（可选）
+    if branch_name == "master" {
+        return Err(anyhow::anyhow!("禁止删除 master 分支"));
+    }
+
+    // 删除分支文件
+    let branch_path = Path::new(".rust-git/refs/heads").join(branch_name);
+    if !branch_path.exists() {
+        return Err(anyhow::anyhow!("分支 {} 不存在", branch_name));
+    }
+
+    fs::remove_file(&branch_path)
+        .context(format!("删除分支 {} 失败", branch_name))?;
+
+    Ok(())
+}
+
+/// 更新分支指向的提交ID
+pub fn update_branch(branch_name: &str, commit_id: &str) -> Result<()> {
+    let branch_path = Path::new(".rust-git/refs/heads").join(branch_name);
+    fs::write(&branch_path, commit_id)
+        .context(format!("更新分支 {} 失败", branch_name))?;
+    Ok(())
+}
+
+/// 读取分支指向的提交ID
+pub fn read_branch_commit(branch_name: &str) -> Result<String> {
+    let branch_path = Path::new(".rust-git/refs/heads").join(branch_name);
+    if !branch_path.exists() {
+        return Err(anyhow::anyhow!("分支 {} 不存在", branch_name));
+    }
+
+    let commit_id = fs::read_to_string(branch_path)
+        .context(format!("读取分支 {} 失败", branch_name))?
+        .trim()
+        .to_string();
+
+    Ok(commit_id)
 }

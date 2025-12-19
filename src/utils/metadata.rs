@@ -148,3 +148,8 @@ pub fn format_commit(commit: &Commit) -> String {
         commit.id, commit.author, time, commit.message
     )
 }
+
+/// 更新分支的最新提交（提交时调用）
+pub fn update_branch_commit(branch_name: &str, commit_id: &str) -> Result<()> {
+    crate::utils::fs::update_branch(branch_name, commit_id)
+}
