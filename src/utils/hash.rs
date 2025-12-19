@@ -47,3 +47,22 @@ pub fn read_object(hash: &str) -> Result<Vec<u8>> {
         .context(format!("读取对象失败：{}", obj_path.display()))?;
     Ok(content)
 }
+
+/// 解析提交对象，提取目录树哈希
+pub fn parse_commit(commit_content: &[u8]) -> Result<String> {
+    let commit_str = String::from_utf8_lossy(commit_content);
+    // 提取 tree 行：tree xxxxxxxx
+    let tree_line = commit_str.lines()
+        .find(|line| line.starts_with("tree "))
+        .ok_or_else(|| anyhow::anyhow!("提交对象无目录树信息"))?;
+    let tree_hash = tree_line.trim_start_matches("tree ").trim();
+    Ok(tree_hash.to_string())
+}
+
+/// 解析目录树对象，提取文件路径和哈希（简化版：暂存区内容）
+pub fn parse_tree(tree_hash: &str) -> Result<serde_json::Value> {
+    let tree_content = read_object(tree_hash)?;
+    let tree_json = serde_json::from_slice(&tree_content)
+        .context("解析目录树对象失败")?;
+    Ok(tree_json)
+}

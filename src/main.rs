@@ -18,6 +18,15 @@ fn main() -> anyhow::Result<()> {
         Commands::Commit { message } => {
             commands::commit::commit(&message).context(format!("执行 commit 命令失败（信息：{}）", message))?;
         }
+        Commands::Log => {
+            commands::log::log().context("执行 log 命令失败")?;
+        }
+        Commands::Branch { name, delete } => {
+            commands::branch::branch(name, delete).context("执行 branch 命令失败")?;
+        }
+        Commands::Checkout { target } => {
+            commands::checkout::checkout(&target).context("执行 checkout 命令失败")?;
+        }
     }
 
     Ok(())
