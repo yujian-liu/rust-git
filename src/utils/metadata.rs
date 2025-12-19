@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Local;
+use chrono::TimeZone;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -98,4 +99,52 @@ pub fn save_commit(commit: &Commit) -> Result<()> {
         .context("写入提交日志失败")?;
 
     Ok(())
+}
+
+/// 读取所有提交记录（按时间倒序）
+pub fn read_all_commits() -> Result<Vec<Commit>> {
+    let log_path = ".rust-git/logs/commits";
+    if !Path::new(log_path).exists() {
+        return Ok(Vec::new());
+    }
+
+    let log_content = fs::read_to_string(log_path)
+        .context("读取提交日志失败")?;
+    // 日志条目以空行分隔，保存格式为："[<id>] <message>\n<pretty JSON>\n\n"
+    // 为兼容 Windows 回车，先规范化为 LF，再按两个 LF 分割条目
+    let normalized = log_content.replace("\r\n", "\n");
+    let mut commits = Vec::new();
+    for entry in normalized.split("\n\n") {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        // 找到第一行结束位置，后续为 JSON 内容（可能多行）
+        if let Some(pos) = entry.find('\n') {
+            let json_part = &entry[pos + 1..];
+            let commit: Commit = serde_json::from_str(json_part)
+                .context("解析提交记录失败（JSON 解析错误）")?;
+            commits.push(commit);
+        } else {
+            // 如果没有换行，跳过格式不正确的条目
+            continue;
+        }
+    }
+
+    // 按时间戳倒序（最新提交在前）
+    commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    Ok(commits)
+}
+
+/// 格式化提交信息（模仿 Git log 样式）
+pub fn format_commit(commit: &Commit) -> String {
+    let time_dt = chrono::Local
+        .timestamp_opt(commit.timestamp, 0)
+        .single()
+        .unwrap_or_else(|| chrono::Local::now());
+    let time = time_dt.format("%Y-%m-%d %H:%M:%S %z").to_string();
+    format!(
+        "commit {}\nAuthor: {}\nDate:   {}\n\n    {}\n",
+        commit.id, commit.author, time, commit.message
+    )
 }
