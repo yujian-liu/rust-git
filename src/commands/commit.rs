@@ -24,7 +24,11 @@ pub fn commit(message: &str) -> RustGitResult<()> {
     // 打印提交信息
     println!("[提交 {}] {}", commit.id, commit.message);
     println!(" 作者: {}", commit.author);
-    println!(" 时间: {}", chrono::Local.timestamp(commit.timestamp, 0).format("%Y-%m-%d %H:%M:%S"));
+    let time = chrono::Local
+        .timestamp_opt(commit.timestamp, 0)
+        .single()
+        .unwrap_or_else(|| chrono::Local::now());
+    println!(" 时间: {}", time.format("%Y-%m-%d %H:%M:%S"));
     println!(" 目录树哈希: {}", commit.tree_hash);
 
     Ok(())
