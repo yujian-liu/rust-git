@@ -72,14 +72,9 @@ pub fn create_commit(message: &str) -> Result<Commit> {
     })
 }
 
-/// 保存提交记录（更新 HEAD + 写入日志）
+/// 保存提交记录（写入日志）
 pub fn save_commit(commit: &Commit) -> Result<()> {
-    // 1. 更新 HEAD（指向最新提交）
-    let head_path = ".rust-git/HEAD";
-    fs::write(head_path, &commit.id)
-        .context("写入 HEAD 指针失败")?;
-    
-    // 2. 写入提交日志
+    // 写入提交日志
     let log_path = ".rust-git/logs/commits";
     // 创建日志目录
     if !Path::new(log_path).parent().unwrap().exists() {

@@ -43,6 +43,20 @@ pub fn create_repo_dirs() -> Result<()> {
             .context("初始化暂存区 index 文件失败")?;
     }
 
+    // 初始化 HEAD 文件，指向默认分支 master
+    let head_path = Path::new(".rust-git/HEAD");
+    if !head_path.exists() {
+        fs::write(head_path, "ref: refs/heads/master")
+            .context("初始化 HEAD 文件失败")?;
+    }
+
+    // 创建默认分支 master 文件
+    let master_branch = Path::new(".rust-git/refs/heads/master");
+    if !master_branch.exists() {
+        fs::write(master_branch, "")
+            .context("初始化 master 分支文件失败")?;
+    }
+
     Ok(())
 }
 

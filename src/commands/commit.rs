@@ -1,7 +1,6 @@
 use crate::utils::{fs, metadata};
 use crate::RustGitResult;
 use chrono::TimeZone;
-use anyhow::Context;
 
 /// 实现 git commit 核心逻辑
 pub fn commit(message: &str) -> RustGitResult<()> {
@@ -35,10 +34,6 @@ pub fn commit(message: &str) -> RustGitResult<()> {
     // 更新当前分支指向最新提交
     let current_branch = crate::utils::fs::get_current_branch()?;
     metadata::update_branch_commit(&current_branch, &commit.id)?;
-    // 更新 HEAD 指向当前分支（标准化 HEAD 格式）
-    let head_content = format!("ref: refs/heads/{}", current_branch);
-    std::fs::write(".rust-git/HEAD", head_content)
-        .context("更新 HEAD 指向分支失败")?;
 
     Ok(())
 }
